@@ -3,29 +3,15 @@
 # @File  : train.py
 # @Author: LauTrueYes
 # @Date  : 2020/12/27
-import numpy as np
 import torch
-import utils
+import numpy as np
 from sklearn import metrics
-import time
 from torch.optim import AdamW
 
 def train(config, model, train_loader, dev_loader):
-    """
-    模型训练方法
-    :param config:
-    :param model:
-    :param train_loader:
-    :param dev_loader:
-    :return:
-    """
 
-    loss_all = np.array([], dtype=float)
-    label_all = np.array([], dtype=float)
-    predict_all = np.array([], dtype=float)
     dev_best_f1 = float('-inf')
-
-    start_time = time.time()
+    avg_loss = []
     param_optimizer = list(model.named_parameters())    #拿到所有model中的参数
     no_decay = ['bias','LayerNorm.bias', 'LayerNorm.weight']    #不需要衰减的参数
     optimizer_grouped_parameters = [
@@ -34,23 +20,23 @@ def train(config, model, train_loader, dev_loader):
     ]
 
     optimizer = AdamW(params = optimizer_grouped_parameters, lr = config.learning_rate)
-    total_batch = 0 #记录进行了多少batch
 
     for epoch in range(config.num_epochs):
-        label_all = []
-        predict_all = []
+        train_right, train_total = 0, 0
         model.train()
         model.to(config.device)
         print('Epoch:{}/{}'.format(epoch+1, config.num_epochs))
         for batch_idx,(input_ids, attention_mask, label_ids) in enumerate(train_loader):
             input_ids, attention_mask, label_ids = input_ids.to(config.device), attention_mask.to(config.device), label_ids.to(config.device)
             input = (input_ids, attention_mask, label_ids)
-            loss, label_predict = model(input)
+            loss, predicts = model(input)
 
-            loss_all = np.append(loss_all, loss.data.item())
-            label_all = np.append(label_all, label_ids.data.cpu().numpy())
-            predict_all = np.append(predict_all, label_predict.data.cpu().numpy())
-            acc = metrics.accuracy_score(predict_all, label_all)
+            avg_loss.append(loss.data.item())
+
+            batch_right = (predicts == label_ids).sum().item()
+            train_right += batch_right
+            train_total += len(predicts)
+
 
             optimizer.zero_grad()
             loss.backward()
@@ -59,8 +45,8 @@ def train(config, model, train_loader, dev_loader):
             if batch_idx % 10 == 0:
                 print("Epoch:{}--------Iter:{}--------train_loss:{:.3f}--------train_acc:{:.3f}".format(epoch + 1,
                                                                                                         batch_idx + 1,
-                                                                                                        loss_all.mean(),
-                                                                                                        acc))
+                                                                                                        np.array(avg_loss).mean(),
+                                                                                                        train_right/train_total))
         dev_loss, dev_acc, dev_f1, dev_report, dev_confusion = evaluate(config, model, dev_loader)
         msg = "Dev Loss:{}--------Dev Acc:{}--------Dev F1:{}"
         print(msg.format(dev_loss, dev_acc, dev_f1))
@@ -76,13 +62,7 @@ def train(config, model, train_loader, dev_loader):
 
 
 def evaluate(config, model, dev_loader):
-    """
 
-    :param config:
-    :param model:
-    :param dev_loader:
-    :return:
-    """
     loss_all = np.array([], dtype=float)
     predict_all = np.array([], dtype=int)
     label_all = np.array([], dtype=int)
