@@ -8,7 +8,6 @@ import torch
 import numpy as np
 import utils
 import argparse
-from config import Config
 from train import train
 from test import test
 from predict import predict
@@ -21,7 +20,10 @@ args = parser.parse_args()
 
 if __name__ == '__main__':
     dataset = './data/NewsTitle'    #数据集地址
-    config = Config(dataset)
+    model_name = args.model
+    lib = import_module('models.'+model_name)
+    config = lib.Config(dataset)
+    model = lib.Model(config).to(config.device)
 
     np.random.seed(1)
     torch.manual_seed(1)
@@ -37,10 +39,6 @@ if __name__ == '__main__':
 
     time_dif = utils.get_time_dif(start_time)
     print("模型开始之前，准备数据时间：",time_dif)
-
-    model_name = args.model
-    lib = import_module('models.'+model_name)
-    model = lib.Model(config).to(config.device)
 
     train(config, model, train_loader, dev_loader)
     predict(config, model, test_loader)
